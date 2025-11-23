@@ -14,7 +14,6 @@ WEBHOOK_URL = os.environ.get('RAILWAY_STATIC_URL', '')
 
 # ======================= VOCAB =======================
 vocab = {
-    vocab = {
     "1": {
         "afraid": "qo'rqmoq",
         "agree": "rozi bo'lmoq", 
@@ -674,7 +673,7 @@ vocab = {
         "accommodate": "joylashtirmoq",
         "analogy": "o'xshashlik",
         "anticipate": "kutmoq"
-    }
+    },
 }
 
 # ======================= LOGGING =======================
@@ -854,5 +853,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
