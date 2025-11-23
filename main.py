@@ -802,17 +802,31 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await send_question(chat_id, context)
 
 # ======================= MAIN =======================
-if __name__ == "__main__":
+def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
+    
+    # Handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("unit", unit_command))
     app.add_handler(CallbackQueryHandler(button))
 
     print("Bot ishga tushdi...")
-    app.run_webhook(
-        listen="0.0.0.0",
-        port=8080,
-        url_path=BOT_TOKEN,
-        webhook_url=f"https://<YOUR-RAILWAY-APP-NAME>.up.railway.app/{BOT_TOKEN}"
+    
+    # Webhook sozlash (Railway uchun)
+    PORT = int(os.environ.get('PORT', 8080))
+    WEBHOOK_URL = os.getenv('RAILWAY_STATIC_URL') or os.getenv('WEBHOOK_URL', '')
+    
+    if WEBHOOK_URL:
+        # Production - webhooks bilan
+        app.run_webhook(
+            listen="0.0.0.0",
+            port=PORT,
+            url_path=BOT_TOKEN,
+            webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}"
+        )
+    else:
+        # Development - polling bilan
+        app.run_polling()
 
-    )
+if __name__ == "__main__":
+    main()
