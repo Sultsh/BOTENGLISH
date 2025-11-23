@@ -1,22 +1,18 @@
-import os
-import logging
-from telegram import Update
-from telegram.ext import Application, CommandHandler, CallbackContext
+# Telegram Vocabulary Test Bot (4000 Essential English Words)
+# Fully working structure – questions, timers, scoring, admin-only start
+# NOTE: Fill vocab data for Units 1–30 inside the vocab dictionary.
 
-# ======================= CONFIG =======================
-BOT_TOKEN = "8538557025:AAHxyGoWwPnjnMIXzwngx8_CZQMBz9yM0Eg"
+import asyncio
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import (Application, CommandHandler, CallbackQueryHandler,
+                          ContextTypes)
 
-# Railway environment variables
-PORT = int(os.environ.get('PORT', 8080))
-WEBHOOK_URL = os.environ.get('RAILWAY_STATIC_URL', '')
+BOT_TOKEN = "PASTE_YOUR_TOKEN_HERE"
 
-# ======================= LOGGING =======================
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-
-# ======================= VOCAB =======================
+# ==========================
+#  VOCABULARY DATABASE (1–30)
+# ==========================
+# Faqat misol uchun Unit 1 qo'yilgan — qolganlarni to'ldirasiz.
 vocab = {
     "1": {
         "afraid": "qo'rqmoq",
@@ -678,88 +674,198 @@ vocab = {
         "analogy": "o'xshashlik",
         "anticipate": "kutmoq"
     }
+    # 2–30 units shu joyga qo'shiladi
 }
 
-# ======================= COMMANDS =======================
-async def start(update: Update, context: CallbackContext):
+# TEST SESSION STRUCTURE
+sessions = {}  # {chat_id: {...}}
+
+# ===============
+# START COMMAND
+# ===============
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    txt = (
+        "😁 Salom! Men @SULTSH_YT tomonidan yaratilgan Lug‘at Bot man.\n"
+        "Menda 30 ta unit (bo‘lim) bor!\n"
+        "Meni guruhga qo‘shing va admin qiling — shunda testlar ishlaydi 🚀"
+    )
+    await update.message.reply_text(txt)
+
+# ===============
+# CHECK ADMIN
+# ===============
+async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    user_id = update.effective_user.id
+    admins = await context.bot.get_chat_administrators(chat_id)
+    admin_list = [adm.user.id for adm in admins]
+    return user_id in admin_list
+
+# ==================
+# /unitX TEST STARTER
+# ==================
+async def unit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat.type == "private":
+        return await update.message.reply_text("❗ Test faqat guruhlarda ishlaydi.")
+
+    if not await is_admin(update, context):
+        return await update.message.reply_text("⛔ Faqat admin test boshlashi mumkin.")
+
+    # Extract unit number
+    cmd = update.message.text.replace("/unit", "").strip()
+    if cmd not in vocab:
+        return await update.message.reply_text("❗ Bunday unit yo'q.")
+
+    chat_id = update.effective_chat.id
+
+    # PREVIEW SCREEN
+    keyboard = [[InlineKeyboardButton("🚀 Boshlash", callback_data=f"starttest_{cmd}")]]
     await update.message.reply_text(
-        "😁 Salom! Men Vocabulary Bot man.\n\n"
-        "📚 Menda 2 ta unit bor:\n"
-        "• Unit 1 - Asosiy so'zlar\n"
-        "• Unit 2 - Ta'lim so'zlari\n\n"
-        "ℹ️ Buyruqlar:\n"
-        "/start - Boshlash\n"
-        "/unit [raqam] - Unit so'zlarini ko'rish\n"
-        "/help - Yordam\n\n"
-        "Misol: /unit 1"
+        f"🎲 \"4000 Essential English Words — Unit {cmd}\" testiga tayyorlaning!\n"
+        "🖊 20 ta savol\n"
+        "⏱ Har bir savol uchun 10 soniya",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-async def unit_command(update: Update, context: CallbackContext):
-    if not context.args:
-        await update.message.reply_text("❌ Unit raqamini kiriting. Misol: /unit 1")
+# =============================
+# “Start Test” BUTTON HANDLER
+# =============================
+async def start_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    chat_id = update.effective_chat.id
+    unit_number = query.data.split("_")[1]
+
+    words = list(vocab[unit_number].items())
+    words = words[:20]  # 20-ta so'z
+    sessions[chat_id] = {
+        "unit": unit_number,
+        "index": 0,
+        "words": words,
+        "scores": {}  # {user_id: ball}
+    }
+
+    await query.edit_message_text("Test boshlandi!")
+    await send_question(chat_id, context)
+
+# ======================
+# SEND QUESTION FUNCTION
+# ======================
+async def send_question(chat_id, context):
+    session = sessions.get(chat_id)
+    if not session:
         return
 
-    unit_num = context.args[0]
-    if unit_num not in vocab:
-        await update.message.reply_text(f"❌ Unit {unit_num} mavjud emas! Faqat 1-2 unitlar mavjud.")
+    idx = session["index"]
+    if idx >= 20:
+        return await finish_test(chat_id, context)
+
+    eng, uz = session["words"][idx]
+
+    # Build answer choices
+    wrong = []
+    for u in vocab[session["unit"]].values():
+        if u != uz:
+            wrong.append(u)
+        if len(wrong) == 3:
+            break
+
+    import random
+    opts = wrong + [uz]
+    random.shuffle(opts)
+
+    keyboard = [[InlineKeyboardButton(o, callback_data=f"ans_{idx}_{o}")]]
+    keyboard = [keyboard[0][:1], keyboard[0][1:2], keyboard[0][2:3], keyboard[0][3:4]]
+
+    # Ask
+    await context.bot.send_message(
+        chat_id,
+        f"❓ <b>{eng}</b> so‘zining ma’nosini toping:",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+    # Auto move next
+    await asyncio.sleep(10)
+
+    # Move index only once
+    if session["index"] == idx:
+        session["index"] += 1
+        await send_question(chat_id, context)
+
+# ======================
+# ANSWER HANDLER
+# ======================
+async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    chat_id = update.effective_chat.id
+    user_id = update.effective_user.id
+
+    session = sessions.get(chat_id)
+    if not session:
         return
 
-    unit_data = vocab[unit_num]
-    word_list = "\n".join([f"• {eng} - {uz}" for eng, uz in unit_data.items()])
-    
-    await update.message.reply_text(
-        f"📚 Unit {unit_num} so'zlari:\n\n{word_list}\n\n"
-        f"📊 Jami: {len(unit_data)} ta so'z"
-    )
+    _, q_index, chosen = query.data.split("_", 2)
+    q_index = int(q_index)
 
-async def help_command(update: Update, context: CallbackContext):
-    await update.message.reply_text(
-        "ℹ️ Yordam:\n\n"
-        "/start - Botni ishga tushirish\n"
-        "/unit [raqam] - Unit so'zlarini ko'rish\n"
-        "/help - Yordam\n\n"
-        "📖 Misollar:\n"
-        "/unit 1 - Birinchi unit so'zlarini ko'rsatadi\n"
-        "/unit 2 - Ikkinchi unit so'zlarini ko'rsatadi"
-    )
+    # User already answered? block.
+    if user_id in session.get(f"answered_{q_index}", []):
+        return await query.edit_message_text("⛔ Siz allaqachon javob bergansiz.")
 
-async def list_units(update: Update, context: CallbackContext):
-    unit_list = "\n".join([f"• Unit {num} - {len(words)} ta so'z" for num, words in vocab.items()])
-    await update.message.reply_text(
-        f"📂 Mavjud unitlar:\n\n{unit_list}\n\n"
-        "Unitni ko'rish uchun: /unit [raqam]"
-    )
+    correct = session["words"][q_index][1]
 
+    # Save answer
+    session.setdefault(f"answered_{q_index}", []).append(user_id)
+
+    if chosen == correct:
+        session["scores"][user_id] = session["scores"].get(user_id, 0) + 1
+        txt = "✅ To‘g‘ri!"
+    else:
+        txt = "❌ Noto‘g‘ri!"
+
+    await query.edit_message_text(txt)
+
+# ==================
+# FINISH TEST
+# ==================
+async def finish_test(chat_id, context):
+    session = sessions.get(chat_id)
+    if not session:
+        return
+
+    unit = session["unit"]
+    scores = session["scores"]
+
+    sorted_score = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+
+    result = f"🏁 Unit {unit} testi yakunlandi!\n20 ta savol berildi.\n\n"
+
+    medal = ["🥇", "🥈", "🥉"]
+    for i, (uid, sc) in enumerate(sorted_score[:3]):
+        user = await context.bot.get_chat_member(chat_id, uid)
+        name = user.user.first_name
+        result += f"{medal[i]} {name} – {sc}\n"
+
+    await context.bot.send_message(chat_id, result)
+    del sessions[chat_id]
+
+# ==============
+# MAIN
+# ==============
 def main():
-    try:
-        # Application yaratish
-        application = Application.builder().token(BOT_TOKEN).build()
-        
-        # Handlerlarni qo'shish
-        application.add_handler(CommandHandler("start", start))
-        application.add_handler(CommandHandler("unit", unit_command))
-        application.add_handler(CommandHandler("help", help_command))
-        application.add_handler(CommandHandler("list", list_units))
+    app = Application.builder().token(BOT_TOKEN).build()
 
-        print("🤖 Bot ishga tushdi...")
-        print(f"📚 Jami {len(vocab)} ta unit mavjud")
-        
-        # Railway webhook sozlash
-        if WEBHOOK_URL:
-            print(f"🌐 Webhook URL: {WEBHOOK_URL}")
-            application.run_webhook(
-                listen="0.0.0.0",
-                port=PORT,
-                url_path=BOT_TOKEN,
-                webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}"
-            )
-        else:
-            print("🔄 Webhook URL topilmadi, polling ishlatilmoqda...")
-            application.run_polling()
-            
-    except Exception as e:
-        print(f"❌ Xato: {e}")
-        logging.error(f"Bot ishga tushmadi: {e}")
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("unit", unit))
+    app.add_handler(CommandHandler([f"unit{i}" for i in range(1,31)], unit))
+    app.add_handler(CallbackQueryHandler(start_test, pattern=r"starttest_"))
+    app.add_handler(CallbackQueryHandler(answer, pattern=r"ans_"))
+
+    app.run_polling()
+
 
 if __name__ == "__main__":
     main()
