@@ -674,7 +674,7 @@ vocab = {
         "accommodate": "joylashtirmoq",
         "analogy": "o'xshashlik",
         "anticipate": "kutmoq"
-    }
+    },
 }
 
 # ======================= LOGGING =======================
@@ -854,3 +854,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
