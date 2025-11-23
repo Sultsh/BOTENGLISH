@@ -771,12 +771,31 @@ async def send_question(chat_id, context):
         if len(wrong) == 3:
             break
 
-    import random
-    opts = wrong + [uz]
+  import random
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+# ======================
+# SEND QUESTION FUNCTION
+# ======================
+async def send_question(chat_id, context):
+    session = sessions.get(chat_id)
+    if not session:
+        return
+
+    idx = session["index"]
+    if idx >= 20:
+        return await finish_test(chat_id, context)
+
+    eng, uz = session["words"][idx]
+
+    # Build answer choices
+    wrong = [u for u in vocab[session["unit"]].values() if u != uz]
+    wrong_choices = random.sample(wrong, 3)  # 3 noto'g'ri javob
+    opts = wrong_choices + [uz]
     random.shuffle(opts)
 
-    keyboard = [[InlineKeyboardButton(o, callback_data=f"ans_{idx}_{o}")]]
-    keyboard = [keyboard[0][:1], keyboard[0][1:2], keyboard[0][2:3], keyboard[0][3:4]]
+    # Inline keyboard – har bir variant alohida qatorda
+    keyboard = [[InlineKeyboardButton(opt, callback_data=f"ans_{idx}_{opt}")] for opt in opts]
 
     # Ask
     await context.bot.send_message(
@@ -786,10 +805,8 @@ async def send_question(chat_id, context):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-    # Auto move next
+    # Auto move next after 10 seconds
     await asyncio.sleep(10)
-
-    # Move index only once
     if session["index"] == idx:
         session["index"] += 1
         await send_question(chat_id, context)
@@ -860,7 +877,7 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("unit", unit))
-    app.add_handler(CommandHandler([f"unit{i}" for i in range(1,31)], unit))
+    app.add_handler(CommandHandler([f"unit{i}" for i in range(1,30)], unit))
     app.add_handler(CallbackQueryHandler(start_test, pattern=r"starttest_"))
     app.add_handler(CallbackQueryHandler(answer, pattern=r"ans_"))
 
@@ -869,4 +886,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
