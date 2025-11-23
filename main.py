@@ -7,7 +7,7 @@ from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import (Application, CommandHandler, CallbackQueryHandler,
                           ContextTypes)
 
-BOT_TOKEN = "PASTE_YOUR_TOKEN_HERE"
+BOT_TOKEN = "8538557025:AAHxyGoWwPnjnMIXzwngx8_CZQMBz9yM0Eg"
 
 # ==========================
 #  VOCABULARY DATABASE (1–30)
@@ -869,3 +869,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
