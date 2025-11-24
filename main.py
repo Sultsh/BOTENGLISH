@@ -1,26 +1,16 @@
 import logging
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 import random
-import re
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    CallbackQueryHandler,
-    ContextTypes
-)
+import os
 
-# ==========================
-# CONFIG
-# ==========================
-BOT_TOKEN = "8538557025:AAHxyGoWwPnjnMIXzwngx8_CZQMBz9yM0Eg"
-ADMINS = [6059547931]   # Seni admin sifatida qo‘ydim
+BOT_TOKEN = os.getenv("8538557025:AAHxyGoWwPnjnMIXzwngx8_CZQMBz9yM0Eg")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # Render URL
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ==========================
-# UNIT VOCABS
-# ==========================
+# ========== YOUR VOCAB ==========
 vocab = {
     "1": {
         "afraid": "qo'rqmoq",
@@ -684,97 +674,143 @@ vocab = {
     }
 }
 
-# Add more units if you want...
+# Active tests
+tests = {}  # group_id => {"unit": X, "questions": [], "scores": {}}
 
 
-# ==========================
-# START BOT
-# ==========================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Assalomu alaykum! /unit1 yoki /unit7 kiriting.")
-
-
-# ==========================
-# UNIT COMMAND HANDLER
-# ==========================
-async def unit_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.message
-
-    # /unitX formatini tutamiz
-    match = re.match(r"/unit(\d+)", message.text)
-    if not match:
-        return
-
-    unit_number = int(match.group(1))
-
-    # Admin emas bo'lsa testni boshlay olmaydi
-    chat_member = await update.effective_chat.get_member(message.from_user.id)
-    if not (chat_member.status in ["administrator", "creator"] or message.from_user.id in ADMINS):
-        await message.reply_text("⛔ Bu unit testini faqat adminlar boshlashi mumkin.")
-        return
-
-    # Unit mavjud emas
-    if unit_number not in VOCABS:
-        await message.reply_text(f"❌ Unit {unit_number} topilmadi.")
-        return
-
-    # Lugatdan random savol
-    data = VOCABS[unit_number]
-    english, correct_uz = random.choice(list(data.items()))
-
-    # Xato variantlar
-    all_uz = list(data.values())
-    wrong = random.sample([x for x in all_uz if x != correct_uz], 3)
-
-    # Javoblarni aralashtiramiz
-    options = wrong + [correct_uz]
-    random.shuffle(options)
-
-    # Tugmalar
-    buttons = [
-        [InlineKeyboardButton(opt, callback_data=f"ans|{english}|{correct_uz}|{opt}")]
-        for opt in options
-    ]
-
-    await message.reply_text(
-        f"🇬🇧 *{english}* so‘zi nimani anglatadi?",
-        reply_markup=InlineKeyboardMarkup(buttons),
-        parse_mode="Markdown"
+    await update.message.reply_text(
+        "😁 Salom! Men @SULTSH_YT tomonidan yaratilgan Lug‘at Bot man.\n"
+        "Menda 30 ta unit bor!\n"
+        "Meni guruhga qo‘shing va admin qiling — shunda testlar ishlaydi 🚀"
     )
 
 
-# ==========================
-# CALLBACK (answer check)
-# ==========================
-async def check_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def generate_questions(unit_number):
+    words = vocab[str(unit_number)]
+    questions = []
+
+    for eng, uz in list(words.items())[:20]:
+        wrong = random.sample(
+            [v for v in words.values() if v != uz], 3
+        )
+        options = [uz] + wrong
+        random.shuffle(options)
+
+        questions.append({
+            "q": eng,
+            "correct": uz,
+            "options": options
+        })
+
+    return questions
+
+
+async def start_unit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+
+    if not (chat.get_member(update.effective_user.id).status in ("creator", "administrator")):
+        return await update.message.reply_text("❌ Faqat adminlar test boshlashi mumkin!")
+
+    text = update.message.text.strip()
+    unit_num = text.replace("/unit", "")
+
+    if not unit_num.isdigit() or unit_num not in vocab:
+        return await update.message.reply_text("❌ Bunday unit mavjud emas!")
+
+    tests[chat.id] = {
+        "unit": unit_num,
+        "questions": generate_questions(unit_num),
+        "scores": {}
+    }
+
+    keyboard = [[InlineKeyboardButton("🚀 Boshlash", callback_data="start_test")]]
+    await update.message.reply_text(
+        f"🎲 4000 Essential English Words — Unit {unit_num}\n"
+        f"🖊 20 ta savol\n"
+        f"⏱ Har savol uchun 10 soniya",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
+async def start_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    _, eng, correct, user_answer = query.data.split("|")
+    chat_id = query.message.chat.id
+    await send_question(chat_id, context)
 
-    if user_answer == correct:
-        response = f"✅ To‘g‘ri! *{eng}* — {correct}"
+
+async def send_question(chat_id, context):
+    test = tests.get(chat_id)
+    if not test or not test["questions"]:
+        return await finish_test(chat_id, context)
+
+    q = test["questions"].pop(0)
+
+    keyboard = []
+    for opt in q["options"]:
+        keyboard.append([InlineKeyboardButton(opt, callback_data=f"ans_{q['correct']}_{opt}")])
+
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=f"❓ {q['q']} so‘zining ma’nosini toping:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
+async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    chat_id = query.message.chat.id
+    user_id = query.from_user.id
+
+    _, correct, chosen = query.data.split("_")
+
+    # Disable keyboard
+    await query.edit_message_reply_markup(reply_markup=None)
+
+    if chosen == correct:
+        tests[chat_id]["scores"][user_id] = tests[chat_id]["scores"].get(user_id, 0) + 1
+        await query.message.reply_text("✅ To‘g‘ri!")
     else:
-        response = f"❌ Noto‘g‘ri!\nTo‘g‘risi: *{eng}* — {correct}"
+        await query.message.reply_text("❌ Noto‘g‘ri!")
 
-    # Variant tugmalarni o‘chirib yuboramiz
-    await query.edit_message_text(response, parse_mode="Markdown")
+    # Next question
+    await send_question(chat_id, context)
 
 
-# ==========================
-# MAIN
-# ==========================
-def main():
+async def finish_test(chat_id, context):
+    scores = tests[chat_id]["scores"]
+    sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+
+    text = "🏁 Test yakunlandi!\n\n"
+    for i, (uid, sc) in enumerate(sorted_scores[:10]):
+        user = await context.bot.get_chat_member(chat_id, uid)
+        text += f"{['🥇','🥈','🥉'][i] if i<3 else '•'} {user.user.first_name} — {sc}\n"
+
+    await context.bot.send_message(chat_id, text)
+
+
+async def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
+    # Commands
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("unit", start))  # fallback
-    app.add_handler(CommandHandler(["unit1", "unit7"], unit_handler))
-    app.add_handler(CallbackQueryHandler(check_answer))
+    app.add_handler(CommandHandler("unit", start_unit))
+    app.add_handler(CallbackQueryHandler(start_test, pattern="start_test"))
+    app.add_handler(CallbackQueryHandler(answer, pattern="ans_"))
 
-    print("Bot ishga tushdi...")
-    app.run_polling()
+    # Webhook
+    await app.bot.set_webhook(WEBHOOK_URL)
+    await app.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.getenv("PORT", 10000)),
+        url_path=""
+    )
 
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
