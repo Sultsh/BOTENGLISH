@@ -5,7 +5,7 @@ import random
 import os
 
 BOT_TOKEN = os.getenv("8538557025:AAHxyGoWwPnjnMIXzwngx8_CZQMBz9yM0Eg")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # Render URL
+WEBHOOK_URL = os.getenv("https://botenglish-1.onrender.com")  # Render URL
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -814,3 +814,4 @@ async def main():
 if __name__ == "__main__":
     import asyncio
     asyncio.run(main())
+
