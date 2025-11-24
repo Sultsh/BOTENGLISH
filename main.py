@@ -4,8 +4,8 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Cont
 import random
 import os
 
-BOT_TOKEN = os.getenv("8538557025:AAHxyGoWwPnjnMIXzwngx8_CZQMBz9yM0Eg")
-WEBHOOK_URL = os.getenv("https://botenglish-1.onrender.com")  # Render URL
+BOT_TOKEN = "8538557025:AAHxyGoWwPnjnMIXzwngx8_CZQMBz9yM0Eg"
+WEBHOOK_URL = "https://botenglish-1.onrender.com/"
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -814,6 +814,7 @@ async def main():
 if __name__ == "__main__":
     import asyncio
     asyncio.run(main())
+
 
 
 
